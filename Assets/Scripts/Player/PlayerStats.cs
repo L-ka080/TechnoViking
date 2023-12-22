@@ -8,6 +8,8 @@ public class PlayerStats : MonoBehaviour
     private int maxPlayerHealth = 4;
     [SerializeField] UIAnimationHandler uIAnimationHandler;
 
+    public bool isPlayerDead = false;
+
     private void Awake()
     {
         PlayerHealth = maxPlayerHealth;

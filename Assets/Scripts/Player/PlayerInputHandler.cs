@@ -10,6 +10,7 @@ public class PlayerInputHandler : MonoBehaviour
 
     [SerializeField] private float playerSpeed;
     private Vector2 playerMovement;
+    private SpriteRenderer spriteRenderer;
 
     public float dashLeft
     {
@@ -42,6 +43,8 @@ public class PlayerInputHandler : MonoBehaviour
         rb = transform.GetComponent<Rigidbody2D>();
 
         dashLeft = maxDashLeft;
+
+        spriteRenderer = GetComponent<SpriteRenderer>();
     }
 
     private void Update()
@@ -58,9 +61,19 @@ public class PlayerInputHandler : MonoBehaviour
     public void OnMove(InputValue inputValue)
     {
         playerMovement = inputValue.Get<Vector2>();
+
+        if (playerMovement.x < 0)
+        {
+            spriteRenderer.flipX = true;
+        }
+        else if (playerMovement.x > 0)
+        {
+            spriteRenderer.flipX = false;
+        }
     }
 
-    public void OnPrimaryAction() {
+    public void OnPrimaryAction()
+    {
         transform.SendMessage("DealDamage", 1);
     }
 
