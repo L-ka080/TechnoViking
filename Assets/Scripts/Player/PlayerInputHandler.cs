@@ -1,6 +1,3 @@
-using System.Collections;
-using System.Collections.Generic;
-using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -8,54 +5,30 @@ public class PlayerInputHandler : MonoBehaviour
 {
     Rigidbody2D rb;
 
-    [SerializeField] private float playerSpeed;
     private Vector2 playerMovement;
     private SpriteRenderer spriteRenderer;
+    private PlayerStats playerStats;
 
-    public float dashLeft
-    {
-        get
-        {
-            return _dashLeft;
-        }
-        set
-        {
-            _dashLeft = value;
-
-            if (_dashLeft > maxDashLeft)
-            {
-                _dashLeft = maxDashLeft;
-            }
-            else if (_dashLeft < 0)
-            {
-                _dashLeft = 0;
-            }
-        }
-    }
-    private float _dashLeft;
-    [SerializeField] private int maxDashLeft;
-    [SerializeField] private float dashPower;
     [SerializeField] private Transform dashPoint;
-
+    [SerializeField] private Transform aimPoint;
+    private Vector2 cursorMovement;
 
     private void Awake()
     {
         rb = transform.GetComponent<Rigidbody2D>();
 
-        dashLeft = maxDashLeft;
-
         spriteRenderer = GetComponent<SpriteRenderer>();
-    }
+        
+        playerStats = GetComponent<PlayerStats>();
 
-    private void Update()
-    {
-        dashLeft += Time.deltaTime;
+        Cursor.lockState = CursorLockMode.Confined;
+        Cursor.visible = false;
     }
 
     private void FixedUpdate()
     {
-        rb.velocity = playerMovement * playerSpeed * 10f * Time.deltaTime;
-        dashPoint.localPosition = playerMovement * dashPower;
+        rb.velocity = playerMovement * playerStats.playerSpeed * 10f * Time.deltaTime;
+        dashPoint.localPosition = playerMovement * playerStats.dashPower;
     }
 
     public void OnMove(InputValue inputValue)
@@ -74,15 +47,39 @@ public class PlayerInputHandler : MonoBehaviour
 
     public void OnPrimaryAction()
     {
-        transform.SendMessage("DealDamage", 1);
+        if (playerStats.attackCooldown <= 0)
+        {
+            aimPoint.SendMessage("PrimaryAttack");
+            playerStats.attackCooldown = 1;
+        }
     }
 
-    public void OnDash(InputValue inputValue)
+    public void OnSecondaryAction()
     {
-        if (dashLeft >= 1)
+        if (playerStats.energyLeft >= 1)
+        {
+            aimPoint.SendMessage("SecondaryAttack");
+            playerStats.energyLeft -= 1;
+        }
+    }
+
+    public void OnAim(InputValue inputValue)
+    {
+        cursorMovement = inputValue.Get<Vector2>();
+
+        Vector3 movementTranslation = Camera.main.ScreenToViewportPoint((Vector3)cursorMovement);
+
+        Vector3 aimPointMovement = new Vector3(movementTranslation.x - 0.5f, movementTranslation.y - 0.5f);
+
+        aimPoint.localPosition = aimPointMovement.normalized * playerStats.attackRadius;
+    }
+
+    public void OnDash()
+    {
+        if (playerStats.energyLeft >= 1)
         {
             rb.MovePosition(dashPoint.position);
-            dashLeft -= 1;
+            playerStats.energyLeft -= 1;
         }
     }
 }

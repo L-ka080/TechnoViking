@@ -1,23 +1,26 @@
-using Unity.VisualScripting;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
-public class EnemyControlller : MonoBehaviour
+public class EnemyController : MonoBehaviour
 {
-    [SerializeField] private PlayerStats playerStats;
+    private PlayerStats playerStats;
+    private EnemyStats enemyStats;
 
     private Vector2 targetPosition;
-    NavMeshAgent agent;
+    public NavMeshAgent agent { get; private set; }
 
-    private enum AIState
+    public enum AIState
     {
         idle,
         wondering,
         foundPlayer,
-        attack
+        attack,
+        stanned,
+        dead
     }
 
-    private AIState state = AIState.idle;
+    public AIState state { get; private set; } = AIState.idle;
     private float stateCountdown
     {
         get
@@ -52,15 +55,21 @@ public class EnemyControlller : MonoBehaviour
         }
     }
     private float _attackCountdown;
-
-    [SerializeField] private float attackDelay;
-    [SerializeField] private float attackDistance;
+    ContactFilter2D contactFilter2D = new ContactFilter2D();
+    [SerializeField] private LayerMask playerLayerMask;
+    List<RaycastHit2D> searchingResults = new List<RaycastHit2D>();
 
     void Awake()
     {
+        playerStats = FindFirstObjectByType<PlayerStats>();
+        enemyStats = GetComponent<EnemyStats>();
+
         agent = GetComponent<NavMeshAgent>();
         agent.updateRotation = false;
         agent.updateUpAxis = false;
+        agent.speed = enemyStats.enemySpeed;
+
+        contactFilter2D.layerMask = playerLayerMask;
 
         stateCountdown = Random.Range(2f, 6f);
     }
@@ -74,6 +83,8 @@ public class EnemyControlller : MonoBehaviour
     {
         if (state == AIState.idle)
         {
+            waitingForPlayer();
+
             stateCountdown -= Time.deltaTime;
 
             if (stateCountdown <= 0f)
@@ -85,6 +96,8 @@ public class EnemyControlller : MonoBehaviour
         }
         if (state == AIState.wondering)
         {
+            waitingForPlayer();
+
             if (!agent.pathPending)
             {
                 if (agent.remainingDistance <= agent.stoppingDistance)
@@ -105,9 +118,9 @@ public class EnemyControlller : MonoBehaviour
             targetPosition = playerStats.transform.position;
             agent.SetDestination(targetPosition);
 
-            if (Vector2.Distance(transform.position, targetPosition) <= 1f)
+            if (Vector2.Distance(playerStats.transform.position, transform.position) <= enemyStats.attackDistance)
             {
-                attackCountdown = attackDelay;
+                attackCountdown = enemyStats.attackDelay;
                 agent.ResetPath();
 
                 state = AIState.attack;
@@ -117,13 +130,40 @@ public class EnemyControlller : MonoBehaviour
         {
             attackCountdown -= Time.deltaTime;
 
-            if (attackCountdown == 0 && Vector2.Distance(playerStats.transform.position, transform.position) <= attackDistance)
+            if (Vector2.Distance(playerStats.transform.position, transform.position) <= enemyStats.attackDistance)
             {
-                AttackPlayer(1);
-
+                AttackPlayer(enemyStats.enemyDamage);
+            }
+            else if (Vector2.Distance(playerStats.transform.position, transform.position) > enemyStats.attackDistance)
+            {
                 state = AIState.foundPlayer;
             }
-            else if (Vector2.Distance(playerStats.transform.position, transform.position) > attackDistance)
+        }
+        if (state == AIState.stanned)
+        {
+            agent.ResetPath();
+        }
+        if (state == AIState.dead)
+        {
+            agent.ResetPath();
+            enemyStats.deathCountDown -= Time.deltaTime;
+
+            float scaleFactor = Mathf.Lerp(0f, 1f, enemyStats.deathCountDown);
+            transform.localScale = new Vector3(scaleFactor, scaleFactor, scaleFactor);
+
+            if (enemyStats.deathCountDown <= 0)
+            {
+                spawnDropObjects();
+                Destroy(gameObject);
+            }
+        }
+    }
+    private void waitingForPlayer()
+    {
+        Physics2D.CircleCast(transform.position, 4.14f, transform.position, contactFilter2D, searchingResults);
+        foreach (RaycastHit2D hit in searchingResults)
+        {
+            if (hit.collider.CompareTag("Player"))
             {
                 state = AIState.foundPlayer;
             }
@@ -132,14 +172,44 @@ public class EnemyControlller : MonoBehaviour
 
     private void AttackPlayer(int damage)
     {
-        playerStats.TakeDamage(damage);
+        if (attackCountdown == 0)
+        {
+            playerStats.TakeDamage(damage);
+            state = AIState.foundPlayer;
+        }
     }
 
-    private void OnTriggerEnter2D(Collider2D collider)
+    public void SetStateFoundPlayer()
     {
-        if (collider.transform.CompareTag("Player"))
+        state = AIState.foundPlayer;
+    }
+
+    public void SetStateDead()
+    {
+        state = AIState.dead;
+    }
+
+    public void SetStateStanned(bool isStanned)
+    {
+        if (isStanned)
         {
-            state = AIState.foundPlayer;
+            state = AIState.stanned;
+        }
+        else
+        {
+            state = AIState.idle;
+        }
+    }
+
+    private void spawnDropObjects() { //FIXME Rework to have random to objectsToDrop too
+        float randomValue = Random.Range(0f, 1f);
+
+        if (randomValue <= 0.3f)
+        {
+            foreach (GameObject dropItem in enemyStats.objectsToDrop)
+            {
+                Instantiate(dropItem, transform.position * randomValue, Quaternion.identity);
+            }
         }
     }
 }
